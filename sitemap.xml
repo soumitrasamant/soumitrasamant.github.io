@@ -6,7 +6,7 @@
 
   <!-- Homepage -->
   <url>
-    <loc>https://soumitra.dev/</loc>
+    <loc>https://soumitrasamant.in/</loc>
     <lastmod>2025-01-01</lastmod>
     <changefreq>monthly</changefreq>
     <priority>1.0</priority>
@@ -14,35 +14,35 @@
 
   <!-- Section anchors — helps Google understand page structure -->
   <url>
-    <loc>https://soumitra.dev/#expertise</loc>
+    <loc>https://soumitrasamant.in/#expertise</loc>
     <lastmod>2025-01-01</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
 
   <url>
-    <loc>https://soumitra.dev/#experience</loc>
+    <loc>https://soumitrasamant.in/#experience</loc>
     <lastmod>2025-01-01</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
 
   <url>
-    <loc>https://soumitra.dev/#stack</loc>
+    <loc>https://soumitrasamant.in/#stack</loc>
     <lastmod>2025-01-01</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
 
   <url>
-    <loc>https://soumitra.dev/#education</loc>
+    <loc>https://soumitrasamant.in/#education</loc>
     <lastmod>2025-01-01</lastmod>
     <changefreq>rarely</changefreq>
     <priority>0.6</priority>
   </url>
 
   <url>
-    <loc>https://soumitra.dev/#contact</loc>
+    <loc>https://soumitrasamant.in/#contact</loc>
     <lastmod>2025-01-01</lastmod>
     <changefreq>yearly</changefreq>
     <priority>0.7</priority>

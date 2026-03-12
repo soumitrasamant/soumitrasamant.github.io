@@ -1,0 +1,6 @@
+User-agent: *
+Allow: /
+Disallow: /cdn-cgi/
+
+# Sitemap location
+Sitemap: https://soumitra.dev/sitemap.xml

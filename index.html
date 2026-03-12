@@ -112,6 +112,9 @@ nav a:hover{color:var(--white)}
 .btn-download svg{width:14px;height:14px;fill:currentColor;transition:fill .25s}
 .nav-dl{background:transparent!important;color:var(--yellow)!important;border:1px solid var(--yellow)!important;display:inline-flex!important;align-items:center!important;gap:6px!important;padding:8px 18px!important}
 .nav-dl:hover{background:var(--yellow)!important;color:var(--black)!important}
+.btn-linkedin{background:transparent;color:#0a66c2;border:1px solid #0a66c2;display:inline-flex;align-items:center;gap:8px}
+.btn-linkedin:hover{background:#0a66c2;color:#fff;transform:translateY(-2px);box-shadow:0 12px 40px rgba(10,102,194,.3)}
+.btn-linkedin svg{width:15px;height:15px;fill:currentColor;flex-shrink:0}
 
 #hero{min-height:100vh;display:flex;align-items:flex-end;padding:0 48px 64px;position:relative;overflow:hidden}
 .hero-bg-text{position:absolute;top:50%;left:-20px;transform:translateY(-50%);font-family:'Bebas Neue',sans-serif;font-size:clamp(160px,22vw,340px);line-height:1;color:rgba(255,255,255,0.025);letter-spacing:-0.02em;pointer-evs:none;white-space:nowrap;user-select:none}
@@ -272,6 +275,10 @@ footer{background:var(--card);border-top:1px solid #1a1a1a;padding:24px 48px;dis
       <div class="hero-cta">
         <a href="mailto:soumitra.kishor@gmail.com" class="btn btn-red">Get In Touch →</a>
         <a href="#experience" class="btn btn-ghost">View Experience</a>
+        <a href="https://www.linkedin.com/in/soumitra-samant/" target="_blank" rel="noopener noreferrer" class="btn btn-linkedin">
+          <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 0 1-2.063-2.065 2.064 2.064 0 1 1 2.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg>
+          LinkedIn
+        </a>
         <a href="/files/resume.pdf" download="Soumitra_Samant_Resume.pdf" class="btn btn-download">
           <svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"><path d="M8 12l-4.5-4.5 1.06-1.06L7 8.88V1h2v7.88l2.44-2.44L12.5 7.5 8 12zM2 14h12v-2H2v2z"/></svg>
           Download CV
@@ -474,7 +481,7 @@ footer{background:var(--card);border-top:1px solid #1a1a1a;padding:24px 48px;dis
   <div class="contact-right reveal reveal-delay-1">
     <a href="mailto:soumitra.kishor@gmail.com" class="clink">
       <div class="clink-ico">✉️</div>
-      <div class="clink-info"><div class="clink-type">Email</div><div class="clink-label"><span class="__cf_email__">soumitra.kishor@gmail.com</span></div></div>
+      <div class="clink-info"><div class="clink-type">Email</div><div class="clink-label"><span class="__cf_email__"><span>soumitra.kishor@gmail.com</span></span></div></div>
       <div class="clink-arrow">→</div>
     </a>
     <div class="clink">
@@ -485,6 +492,13 @@ footer{background:var(--card);border-top:1px solid #1a1a1a;padding:24px 48px;dis
       <div class="clink-ico">🏢</div>
       <div class="clink-info"><div class="clink-type">Current Role</div><div class="clink-label">Security Architect II · Akamai Technologies</div></div>
     </div>
+    <a href="https://www.linkedin.com/in/soumitra-samant/" target="_blank" rel="noopener noreferrer" class="clink">
+      <div class="clink-ico">
+        <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" style="width:22px;height:22px;fill:#0a66c2"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 0 1-2.063-2.065 2.064 2.064 0 1 1 2.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg>
+      </div>
+      <div class="clink-info"><div class="clink-type">LinkedIn</div><div class="clink-label">linkedin.com/in/soumitra-samant</div></div>
+      <div class="clink-arrow">→</div>
+    </a>
   </div>
 </section>
 
@@ -504,7 +518,7 @@ footer{background:var(--card);border-top:1px solid #1a1a1a;padding:24px 48px;dis
             observer.unobserve(entry.target);
           }
         });
-      }, { threshold: 0.12 });
+      }, { threshold: 0.1 });
       els.forEach(function(el) { observer.observe(el); });
     } else {
       els.forEach(function(el) { el.classList.add('on'); });

@@ -436,18 +436,33 @@ hr{border:none;border-top:1px solid var(--border);margin:14px 0;}
       <div class="page-hd-title">Trade Journal</div>
       <div class="page-hd-sub" id="j-hd-count">0 entries</div>
     </div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+      <!-- filter bar -->
+      <select id="j-filter" onchange="renderJ()" style="font-size:11px;padding:5px 8px;background:var(--bg3);border:1px solid var(--border2);border-radius:6px;color:var(--text2);">
+        <option value="all">All trades</option>
+        <option value="ce">CE only</option>
+        <option value="pe">PE only</option>
+        <option value="wins">Wins only</option>
+        <option value="losses">Losses only</option>
+        <option value="open">Open (no exit)</option>
+      </select>
       <button class="btn btn-primary" onclick="openJournalFile()" id="btn-open-file">&#128194; Open nifty_journal.csv</button>
       <button class="btn btn-danger" onclick="clearAll()">&#x2715; Clear All</button>
     </div>
   </div>
-  <div id="file-status" style="margin-bottom:12px;padding:8px 12px;background:var(--bg3);border:1px solid var(--border);border-radius:7px;font-size:11px;display:flex;align-items:center;gap:8px;">
-    <span id="file-status-dot" style="width:7px;height:7px;border-radius:50%;background:var(--text3);flex-shrink:0;box-shadow:none;"></span>
+
+  <!-- file status -->
+  <div id="file-status" style="margin-bottom:14px;padding:8px 14px;background:var(--bg3);border:1px solid var(--border);border-radius:7px;font-size:11px;display:flex;align-items:center;gap:8px;">
+    <span id="file-status-dot" style="width:7px;height:7px;border-radius:50%;background:var(--text3);flex-shrink:0;"></span>
     <span id="file-status-text" style="color:var(--text3);">No file loaded — click Open to load or create nifty_journal.csv</span>
   </div>
+
+  <!-- mini summary strip -->
+  <div id="j-summary-strip" style="display:none;margin-bottom:14px;"></div>
+
+  <!-- trade list -->
   <div id="j-list"></div>
 </div>
-
 <!-- ─── STATS ─── -->
 <div class="panel" id="panel-stats">
   <div class="page-hd">
@@ -940,39 +955,226 @@ async function logTrade(){
 }
 
 function renderJ(){
-  const list=document.getElementById('j-list');
-  document.getElementById('j-hd-count').textContent=`${journal.length} entr${journal.length===1?'y':'ies'}`;
-  if(!journal.length){ list.innerHTML=`<div class="empty"><div class="empty-ico">◇</div>No trades logged yet.</div>`; return; }
-  list.innerHTML='';
-  journal.forEach(t=>{
-    const div=document.createElement('div');
-    div.className='j-entry';
-    const ac=t.style==='ce'?'ce':'pe';
-    let pnlStr='';
-    if(t.exitPrice&&t.entryPrice&&t.lots){
-      const pnl=Math.round((t.exitPrice-t.entryPrice)*t.lots*65);
-      const col=pnl>=0?'var(--ce)':'var(--pe)';
-      const sign=pnl>=0?'+':'';
-      pnlStr=`<span style="font-size:12px;color:${col};font-weight:600;">${sign}₹${Math.abs(pnl).toLocaleString('en-IN')}</span>`;
-    }
-    const levs=[
-      t.pdh?`PDH ${fmt(t.pdh)}`:'', t.pdl?`PDL ${fmt(t.pdl)}`:'',
-      (t.orh&&t.orl)?`OR ${fmt(t.orh)}–${fmt(t.orl)}`:'',
-      t.spot?`Spot ${fmt(t.spot)}`:'', t.vwap?`VWAP ${fmt(t.vwap)}`:'',
-      t.premium?`Prem ₹${t.premium}`:'', t.entryPrice?`Entry ₹${t.entryPrice}`:'',
-      t.exitPrice?`Exit ₹${t.exitPrice}`:'', t.lots?`${t.lots} lot${t.lots>1?'s':''}`:'',
-      t.vix?`VIX ${t.vix}`:'', t.mp?`MaxPain ${fmt(t.mp)}`:'',
-    ].filter(Boolean).map(l=>`<span class="j-lev">${l}</span>`).join('');
-    div.innerHTML=`<div class="j-hd">
-      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-        <span class="j-action ${ac}">${t.action}</span>
-        <span style="font-size:11px;color:var(--text2)">${t.setup||''}</span>
-        ${pnlStr}
-      </div>
-      <div class="j-meta"><span>${t.time}</span><button class="del-btn" onclick="delEntry(${t.id})">✕</button></div>
+  const LOT = 65;
+  const list = document.getElementById('j-list');
+  const strip = document.getElementById('j-summary-strip');
+  const filterVal = document.getElementById('j-filter')?.value || 'all';
+
+  document.getElementById('j-hd-count').textContent = `${journal.length} entr${journal.length===1?'y':'ies'}`;
+
+  if(!journal.length){
+    strip.style.display='none';
+    list.innerHTML=`<div class="empty"><div class="empty-ico">◇</div>No trades logged yet.<br><span style="font-size:11px;margin-top:6px;display:block;">Go to Decision Engine, fill inputs, get a signal, then save to journal.</span></div>`;
+    return;
+  }
+
+  // ── Compute summary numbers across ALL trades ──────────────────────
+  const allClosed = journal.filter(t=>t.exitPrice&&t.entryPrice&&t.lots);
+  const allPnls   = allClosed.map(t=>Math.round((t.exitPrice-t.entryPrice)*t.lots*LOT));
+  const totalPnl  = allPnls.reduce((a,b)=>a+b,0);
+  const allWins   = allPnls.filter(p=>p>0).length;
+  const allWR     = allPnls.length ? Math.round(allWins/allPnls.length*100) : 0;
+  const openCount = journal.filter(t=>!t.exitPrice||!t.entryPrice).length;
+
+  // running equity for mini sparkline
+  let runEq=0;
+  const eqPoints = allClosed.slice().reverse().map(t=>{
+    runEq += Math.round((t.exitPrice-t.entryPrice)*t.lots*LOT);
+    return runEq;
+  });
+
+  // ── Summary strip ────────────────────────────────────────────────
+  strip.style.display='grid';
+  const pnlCol = totalPnl>=0?'var(--ce)':'var(--pe)';
+  const wrCol  = allWR>=55?'var(--ce)':allWR>=45?'var(--amber)':'var(--pe)';
+
+  // mini SVG sparkline
+  function miniSparkline(data){
+    if(data.length<2) return '';
+    const W=120,H=32;
+    const mn=Math.min(0,...data), mx=Math.max(0,...data);
+    const rng=mx-mn||1;
+    const sx=i=>(i/(data.length-1))*(W-4)+2;
+    const sy=v=>H-2-((v-mn)/rng)*(H-4);
+    const pts=data.map((v,i)=>`${sx(i).toFixed(1)},${sy(v).toFixed(1)}`).join(' ');
+    const col=data[data.length-1]>=0?'#00e090':'#ff5252';
+    return `<svg viewBox="0 0 ${W} ${H}" style="width:${W}px;height:${H}px;"><polyline points="${pts}" fill="none" stroke="${col}" stroke-width="1.5" stroke-linejoin="round"/></svg>`;
+  }
+
+  strip.innerHTML=`<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:14px;">
+    <div style="background:var(--bg2);border:1px solid var(--border);border-radius:9px;padding:12px 14px;">
+      <div style="font-size:9px;color:var(--text3);letter-spacing:.1em;text-transform:uppercase;margin-bottom:5px;">Total P&amp;L</div>
+      <div style="font-size:20px;font-weight:600;font-family:var(--display);color:${pnlCol}">${totalPnl>=0?'+':''}₹${Math.abs(totalPnl).toLocaleString('en-IN')}</div>
+      <div style="font-size:10px;color:var(--text3);margin-top:2px;">${allClosed.length} closed trades</div>
     </div>
-    <div class="j-levels">${levs}</div>
-    ${t.notes?`<div class="j-notes">${t.notes}</div>`:''}`;
+    <div style="background:var(--bg2);border:1px solid var(--border);border-radius:9px;padding:12px 14px;">
+      <div style="font-size:9px;color:var(--text3);letter-spacing:.1em;text-transform:uppercase;margin-bottom:5px;">Win Rate</div>
+      <div style="font-size:20px;font-weight:600;font-family:var(--display);color:${wrCol}">${allWR}%</div>
+      <div style="font-size:10px;color:var(--text3);margin-top:2px;">${allWins}W / ${allPnls.length-allWins}L</div>
+    </div>
+    <div style="background:var(--bg2);border:1px solid var(--border);border-radius:9px;padding:12px 14px;">
+      <div style="font-size:9px;color:var(--text3);letter-spacing:.1em;text-transform:uppercase;margin-bottom:5px;">Total Trades</div>
+      <div style="font-size:20px;font-weight:600;font-family:var(--display);color:var(--text)">${journal.length}</div>
+      <div style="font-size:10px;color:var(--amber);margin-top:2px;">${openCount} open / unexited</div>
+    </div>
+    <div style="background:var(--bg2);border:1px solid var(--border);border-radius:9px;padding:12px 14px;">
+      <div style="font-size:9px;color:var(--text3);letter-spacing:.1em;text-transform:uppercase;margin-bottom:5px;">CE / PE Split</div>
+      <div style="font-size:20px;font-weight:600;font-family:var(--display);">
+        <span style="color:var(--ce)">${journal.filter(t=>t.style==='ce').length}</span>
+        <span style="color:var(--text3);font-size:14px;"> / </span>
+        <span style="color:var(--pe)">${journal.filter(t=>t.style==='pe').length}</span>
+      </div>
+      <div style="margin-top:6px;background:var(--bg4);border-radius:3px;height:4px;overflow:hidden;">
+        <div style="width:${journal.length?Math.round(journal.filter(t=>t.style==='ce').length/journal.length*100):50}%;height:100%;background:var(--ce);border-radius:3px;"></div>
+      </div>
+    </div>
+    <div style="background:var(--bg2);border:1px solid var(--border);border-radius:9px;padding:12px 14px;display:flex;flex-direction:column;justify-content:space-between;">
+      <div style="font-size:9px;color:var(--text3);letter-spacing:.1em;text-transform:uppercase;margin-bottom:4px;">Equity Trend</div>
+      ${miniSparkline(eqPoints)}
+    </div>
+  </div>`;
+
+  // ── Filter trades ────────────────────────────────────────────────
+  let filtered = [...journal];
+  if(filterVal==='ce')     filtered = filtered.filter(t=>t.style==='ce');
+  if(filterVal==='pe')     filtered = filtered.filter(t=>t.style==='pe');
+  if(filterVal==='wins')   filtered = filtered.filter(t=>t.exitPrice&&t.entryPrice&&Math.round((t.exitPrice-t.entryPrice)*t.lots*LOT)>0);
+  if(filterVal==='losses') filtered = filtered.filter(t=>t.exitPrice&&t.entryPrice&&Math.round((t.exitPrice-t.entryPrice)*t.lots*LOT)<=0);
+  if(filterVal==='open')   filtered = filtered.filter(t=>!t.exitPrice||!t.entryPrice);
+
+  list.innerHTML='';
+  if(!filtered.length){
+    list.innerHTML=`<div class="empty"><div class="empty-ico">◇</div>No trades match this filter.</div>`;
+    return;
+  }
+
+  filtered.forEach((t,idx)=>{
+    // ── P&L calc ──────────────────────────────────────────────────
+    const hasPnl = t.exitPrice && t.entryPrice && t.lots;
+    const pnl    = hasPnl ? Math.round((t.exitPrice - t.entryPrice)*t.lots*LOT) : null;
+    const premPct= hasPnl && t.entryPrice ? Math.round(((t.exitPrice-t.entryPrice)/t.entryPrice)*100) : null;
+    const isWin  = pnl !== null && pnl > 0;
+    const isLoss = pnl !== null && pnl <= 0;
+    const isOpen = pnl === null;
+
+    const acCol  = t.style==='ce' ? 'var(--ce)' : 'var(--pe)';
+    const pnlCol2= isWin?'var(--ce)':isLoss?'var(--pe)':'var(--text3)';
+    const borderCol = isWin?'rgba(0,224,144,0.3)':isLoss?'rgba(255,82,82,0.3)':isOpen?'rgba(240,165,0,0.2)':'var(--border)';
+
+    // SL level (30% below entry)
+    const slLevel = t.entryPrice ? (t.entryPrice*0.70).toFixed(1) : null;
+    // OR range
+    const orRange = (t.orh && t.orl) ? Math.round(t.orh - t.orl) : null;
+    // Open location
+    const openLoc = t.pdh&&t.pdl&&t.spot ? (t.spot>t.pdh?'Above PDH':t.spot<t.pdl?'Below PDL':'In Range') : null;
+    // VWAP relation
+    const vwapRel = t.spot&&t.vwap ? (t.spot>t.vwap?'Above VWAP':'Below VWAP') : null;
+
+    // ── Progress bar for premium move ──────────────────────────────
+    let progressBar = '';
+    if(hasPnl && t.entryPrice){
+      const pct = Math.max(-100, Math.min(200, premPct));
+      const barW = Math.min(100, Math.abs(pct));
+      const barCol = pct>=0?'var(--ce)':'var(--pe)';
+      // markers at -30% (SL), +50% (T1), +80% (T2)
+      progressBar = `
+        <div style="margin:10px 0 6px;">
+          <div style="display:flex;justify-content:space-between;font-size:9px;color:var(--text3);margin-bottom:4px;">
+            <span style="color:var(--pe);">SL −30%</span>
+            <span>Entry ₹${t.entryPrice}</span>
+            <span style="color:var(--ce);">T1 +50%</span>
+            <span style="color:var(--ce);">T2 +80%</span>
+          </div>
+          <div style="position:relative;background:var(--bg4);border-radius:4px;height:8px;overflow:visible;">
+            <!-- SL marker -->
+            <div style="position:absolute;left:23%;top:-3px;width:1px;height:14px;background:var(--pe);opacity:0.5;"></div>
+            <!-- T1 marker -->
+            <div style="position:absolute;left:50%;top:-3px;width:1px;height:14px;background:var(--ce);opacity:0.4;"></div>
+            <!-- T2 marker -->
+            <div style="position:absolute;left:72.7%;top:-3px;width:1px;height:14px;background:var(--ce);opacity:0.4;"></div>
+            <!-- fill bar — starts at 30% (entry position) -->
+            <div style="position:absolute;left:30%;top:0;width:${(barW*0.7).toFixed(1)}%;height:100%;background:${barCol};border-radius:0 4px 4px 0;opacity:0.85;"></div>
+          </div>
+          <div style="display:flex;justify-content:flex-end;margin-top:3px;">
+            <span style="font-size:10px;color:${barCol};font-weight:600;">${pct>=0?'+':''}${pct}% premium move</span>
+          </div>
+        </div>`;
+    }
+
+    // ── Status badge ───────────────────────────────────────────────
+    const statusBadge = isOpen
+      ? `<span style="font-size:9px;background:var(--amber2);color:var(--amber);border:1px solid rgba(240,165,0,.3);padding:2px 7px;border-radius:4px;letter-spacing:.05em;">OPEN</span>`
+      : isWin
+      ? `<span style="font-size:9px;background:var(--ce2);color:var(--ce);border:1px solid rgba(0,224,144,.3);padding:2px 7px;border-radius:4px;letter-spacing:.05em;">WIN</span>`
+      : `<span style="font-size:9px;background:var(--pe2);color:var(--pe);border:1px solid rgba(255,82,82,.3);padding:2px 7px;border-radius:4px;letter-spacing:.05em;">LOSS</span>`;
+
+    // ── Trade number (reverse order — most recent = #1) ────────────
+    const tradeNum = filtered.length - idx;
+
+    const div = document.createElement('div');
+    div.style.cssText=`background:var(--bg2);border:1px solid ${borderCol};border-radius:10px;padding:14px 16px;margin-bottom:10px;transition:border-color .15s;`;
+
+    div.innerHTML=`
+      <!-- HEADER ROW -->
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+          <span style="font-size:9px;color:var(--text3);background:var(--bg4);padding:2px 6px;border-radius:4px;">#${tradeNum}</span>
+          <span style="font-family:var(--display);font-size:15px;font-weight:600;color:${acCol};">${t.action}</span>
+          ${statusBadge}
+          <span style="font-size:11px;color:var(--text2);max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${(t.setup||'').split('—')[0].trim()}</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+          ${pnl!==null?`<span style="font-family:var(--display);font-size:16px;font-weight:600;color:${pnlCol2};">${pnl>=0?'+':''}₹${Math.abs(pnl).toLocaleString('en-IN')}</span>`:''}
+          <span style="font-size:10px;color:var(--text3);">${t.time}</span>
+          <button onclick="delEntry(${t.id})" style="background:none;border:none;cursor:pointer;font-size:10px;color:var(--text3);padding:2px 5px;border-radius:3px;transition:all .15s;" onmouseover="this.style.color='var(--pe)';this.style.background='var(--pe2)'" onmouseout="this.style.color='var(--text3)';this.style.background='none'">✕</button>
+        </div>
+      </div>
+
+      <!-- PRICE METRICS ROW -->
+      <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-bottom:10px;">
+        <div style="background:var(--bg3);border-radius:7px;padding:8px 10px;">
+          <div style="font-size:9px;color:var(--text3);margin-bottom:3px;">Entry</div>
+          <div style="font-size:14px;font-weight:500;color:var(--text);">${t.entryPrice?'₹'+t.entryPrice:'—'}</div>
+        </div>
+        <div style="background:var(--bg3);border-radius:7px;padding:8px 10px;">
+          <div style="font-size:9px;color:var(--text3);margin-bottom:3px;">Exit</div>
+          <div style="font-size:14px;font-weight:500;color:${t.exitPrice?pnlCol2:'var(--amber)'};">${t.exitPrice?'₹'+t.exitPrice:'Open'}</div>
+        </div>
+        <div style="background:var(--bg3);border-radius:7px;padding:8px 10px;">
+          <div style="font-size:9px;color:var(--text3);margin-bottom:3px;">SL Level</div>
+          <div style="font-size:14px;font-weight:500;color:var(--pe);">${slLevel?'₹'+slLevel:'—'}</div>
+        </div>
+        <div style="background:var(--bg3);border-radius:7px;padding:8px 10px;">
+          <div style="font-size:9px;color:var(--text3);margin-bottom:3px;">Lots × Size</div>
+          <div style="font-size:14px;font-weight:500;color:var(--text);">${t.lots?t.lots+' × '+LOT:'—'}</div>
+        </div>
+        <div style="background:var(--bg3);border-radius:7px;padding:8px 10px;">
+          <div style="font-size:9px;color:var(--text3);margin-bottom:3px;">Premium</div>
+          <div style="font-size:14px;font-weight:500;color:var(--text);">${t.premium?'₹'+t.premium:'—'}</div>
+        </div>
+      </div>
+
+      <!-- PREMIUM MOVE PROGRESS BAR -->
+      ${progressBar}
+
+      <!-- MARKET CONTEXT PILLS -->
+      <div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:${t.notes?'10px':'0'};">
+        ${t.pdh?`<span style="font-size:10px;color:var(--text3);background:var(--bg3);border:1px solid var(--border);border-radius:4px;padding:2px 7px;">PDH ${(+t.pdh).toLocaleString('en-IN')}</span>`:''}
+        ${t.pdl?`<span style="font-size:10px;color:var(--text3);background:var(--bg3);border:1px solid var(--border);border-radius:4px;padding:2px 7px;">PDL ${(+t.pdl).toLocaleString('en-IN')}</span>`:''}
+        ${orRange?`<span style="font-size:10px;color:var(--blue);background:var(--blue2);border:1px solid rgba(79,163,255,.25);border-radius:4px;padding:2px 7px;">OR ${Math.round(t.orh)}–${Math.round(t.orl)} · ${orRange}pts</span>`:''}
+        ${t.spot?`<span style="font-size:10px;color:var(--text3);background:var(--bg3);border:1px solid var(--border);border-radius:4px;padding:2px 7px;">Spot ${(+t.spot).toLocaleString('en-IN')}</span>`:''}
+        ${t.vwap?`<span style="font-size:10px;color:var(--text3);background:var(--bg3);border:1px solid var(--border);border-radius:4px;padding:2px 7px;">VWAP ${(+t.vwap).toLocaleString('en-IN')}</span>`:''}
+        ${vwapRel?`<span style="font-size:10px;color:${t.spot>t.vwap?'var(--ce)':'var(--pe)'};background:${t.spot>t.vwap?'var(--ce2)':'var(--pe2)'};border:1px solid ${t.spot>t.vwap?'rgba(0,224,144,.25)':'rgba(255,82,82,.25)'};border-radius:4px;padding:2px 7px;">${vwapRel}</span>`:''}
+        ${openLoc?`<span style="font-size:10px;color:var(--purple);background:var(--purple2);border:1px solid rgba(167,139,250,.25);border-radius:4px;padding:2px 7px;">${openLoc}</span>`:''}
+        ${t.vix?`<span style="font-size:10px;color:${t.vix>20?'var(--pe)':t.vix>16?'var(--amber)':'var(--ce)'};background:var(--bg3);border:1px solid var(--border);border-radius:4px;padding:2px 7px;">VIX ${t.vix}</span>`:''}
+        ${t.mp?`<span style="font-size:10px;color:var(--purple);background:var(--purple2);border:1px solid rgba(167,139,250,.25);border-radius:4px;padding:2px 7px;">MaxPain ${(+t.mp).toLocaleString('en-IN')}</span>`:''}
+        ${t.expiry==='yes'?`<span style="font-size:10px;color:var(--amber);background:var(--amber2);border:1px solid rgba(240,165,0,.3);border-radius:4px;padding:2px 7px;">Expiry Day</span>`:''}
+        ${t.cat?`<span style="font-size:10px;color:var(--text3);background:var(--bg4);border:1px solid var(--border);border-radius:4px;padding:2px 7px;">${t.cat.split('—')[0].trim()}</span>`:''}
+      </div>
+
+      <!-- NOTES -->
+      ${t.notes?`<div style="font-size:11px;color:var(--text2);border-left:2px solid ${acCol};padding:6px 10px;background:var(--bg3);border-radius:0 6px 6px 0;font-style:italic;line-height:1.6;">${t.notes}</div>`:''}
+    `;
     list.appendChild(div);
   });
 }

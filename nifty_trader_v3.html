@@ -453,7 +453,7 @@ hr{border:none;border-top:1px solid var(--border);margin:14px 0;}
   <div class="page-hd">
     <div>
       <div class="page-hd-title">Journal Statistics</div>
-      <div class="page-hd-sub">Computed from closed trades (with exit price)</div>
+      <div class="page-hd-sub">9 analytics sections — computed from closed trades</div>
     </div>
   </div>
   <div id="stats-content"></div>
@@ -988,49 +988,465 @@ async function clearAll(){
 }
 
 // ═══════════════════════════════════════════════════
-// STATS
+// STATS — COMPREHENSIVE ANALYTICS ENGINE
 // ═══════════════════════════════════════════════════
 function renderStats(){
   const el=document.getElementById('stats-content');
-  if(!journal.length){ el.innerHTML=`<div class="empty"><div class="empty-ico">◻</div>Log some trades first.</div>`; return; }
-  const total=journal.length;
-  const ceC=journal.filter(t=>t.style==='ce').length;
-  const peC=journal.filter(t=>t.style==='pe').length;
-  const closed=journal.filter(t=>t.exitPrice&&t.entryPrice&&t.lots);
-  const pnls=closed.map(t=>Math.round((t.exitPrice-t.entryPrice)*t.lots*65));
-  const totalPnl=pnls.reduce((a,b)=>a+b,0);
-  const wins=pnls.filter(p=>p>0), losses=pnls.filter(p=>p<0);
-  const wr=pnls.length?Math.round(wins.length/pnls.length*100):null;
-  const avgW=wins.length?Math.round(wins.reduce((a,b)=>a+b,0)/wins.length):0;
-  const avgL=losses.length?Math.round(Math.abs(losses.reduce((a,b)=>a+b,0)/losses.length)):0;
-  const rr=avgL?'1 : '+(avgW/avgL).toFixed(2):'—';
-  const pnlColor=totalPnl>=0?'var(--ce)':'var(--pe)';
-  const wrColor=wr===null?'var(--text3)':wr>=55?'var(--ce)':wr>=45?'var(--amber)':'var(--pe)';
+  if(!journal.length){ el.innerHTML=`<div class="empty"><div class="empty-ico">◻</div>Log some trades first to see analytics.</div>`; return; }
 
-  // setup breakdown
-  const bySetup={};
-  journal.forEach(t=>{ bySetup[t.action]=(bySetup[t.action]||0)+1; });
-  const setupRows=Object.entries(bySetup).map(([k,v])=>`<tr><td style="color:var(--text2)">${k}</td><td style="font-family:var(--mono);color:var(--text)">${v}</td><td style="color:var(--text3)">${Math.round(v/total*100)}%</td></tr>`).join('');
+  const LOT=65;
+  const CAPITAL=140000;
 
+  // ── Core data ──────────────────────────────────────────────────────
+  const total   = journal.length;
+  const closed  = journal.filter(t=>t.exitPrice&&t.entryPrice&&t.lots);
+  const open    = journal.filter(t=>!t.exitPrice||!t.entryPrice);
+
+  // Enrich closed trades with pnl
+  const trades  = closed.map(t=>({
+    ...t,
+    pnl: Math.round((t.exitPrice - t.entryPrice) * t.lots * LOT),
+    premPct: t.entryPrice ? Math.round(((t.exitPrice - t.entryPrice)/t.entryPrice)*100) : 0,
+    dateObj: new Date(t.time),
+  }));
+
+  const pnls    = trades.map(t=>t.pnl);
+  const wins    = trades.filter(t=>t.pnl>0);
+  const losses  = trades.filter(t=>t.pnl<=0);
+  const totalPnl= pnls.reduce((a,b)=>a+b,0);
+  const wr      = pnls.length ? (wins.length/pnls.length*100).toFixed(1) : 0;
+  const avgW    = wins.length   ? Math.round(wins.reduce((a,t)=>a+t.pnl,0)/wins.length) : 0;
+  const avgL    = losses.length ? Math.round(Math.abs(losses.reduce((a,t)=>a+t.pnl,0)/losses.length)) : 0;
+  const rr      = avgL ? (avgW/avgL).toFixed(2) : '—';
+  const ev      = pnls.length ? Math.round((wins.length/pnls.length)*avgW - (losses.length/pnls.length)*avgL) : 0;
+
+  // Expectancy score colour
+  const evColor = ev>0?'var(--ce)':ev<0?'var(--pe)':'var(--text3)';
+  const wrColor = parseFloat(wr)>=55?'var(--ce)':parseFloat(wr)>=45?'var(--amber)':'var(--pe)';
+  const pnlColor= totalPnl>=0?'var(--ce)':'var(--pe)';
+
+  // Max drawdown
+  let peak=0, dd=0, maxDD=0;
+  let runPnl=0;
+  trades.slice().reverse().forEach(t=>{
+    runPnl+=t.pnl;
+    if(runPnl>peak) peak=runPnl;
+    dd=peak-runPnl;
+    if(dd>maxDD) maxDD=dd;
+  });
+
+  // Largest win / largest loss
+  const bestTrade  = trades.length ? trades.reduce((a,b)=>b.pnl>a.pnl?b:a) : null;
+  const worstTrade = trades.length ? trades.reduce((a,b)=>b.pnl<a.pnl?b:a) : null;
+
+  // Consecutive wins/losses
+  let maxCW=0,maxCL=0,cw=0,cl=0;
+  trades.slice().reverse().forEach(t=>{
+    if(t.pnl>0){cw++;cl=0;maxCW=Math.max(maxCW,cw);}
+    else{cl++;cw=0;maxCL=Math.max(maxCL,cl);}
+  });
+
+  // Profit factor
+  const grossW = wins.reduce((a,t)=>a+t.pnl,0);
+  const grossL = Math.abs(losses.reduce((a,t)=>a+t.pnl,0));
+  const pf     = grossL>0 ? (grossW/grossL).toFixed(2) : '∞';
+
+  // ROC on capital
+  const rocPct = ((totalPnl/CAPITAL)*100).toFixed(1);
+
+  // ── Cumulative P&L equity curve data ──────────────────────────────
+  let cum=0;
+  const equityCurve = trades.slice().reverse().map((t,i)=>{cum+=t.pnl;return{i:i+1,v:cum,pnl:t.pnl};});
+
+  // ── Playbook row performance ───────────────────────────────────────
+  const byRow={};
+  trades.forEach(t=>{
+    const k = t.cat||t.action||'Unknown';
+    if(!byRow[k]) byRow[k]={name:k,count:0,wins:0,pnl:0};
+    byRow[k].count++;
+    if(t.pnl>0) byRow[k].wins++;
+    byRow[k].pnl+=t.pnl;
+  });
+  const rowPerf = Object.values(byRow).sort((a,b)=>b.pnl-a.pnl);
+
+  // ── CE vs PE breakdown ─────────────────────────────────────────────
+  const ceT = trades.filter(t=>t.style==='ce');
+  const peT = trades.filter(t=>t.style==='pe');
+  const ceW = ceT.filter(t=>t.pnl>0).length;
+  const peW = peT.filter(t=>t.pnl>0).length;
+  const cePnl = ceT.reduce((a,t)=>a+t.pnl,0);
+  const pePnl = peT.reduce((a,t)=>a+t.pnl,0);
+  const ceWR = ceT.length ? Math.round(ceW/ceT.length*100) : 0;
+  const peWR = peT.length ? Math.round(peW/peT.length*100) : 0;
+
+  // ── Day-of-week performance ────────────────────────────────────────
+  const days=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const byDay={};
+  trades.forEach(t=>{
+    const d=t.dateObj.getDay();
+    const k=days[d];
+    if(!byDay[k]) byDay[k]={day:k,count:0,wins:0,pnl:0};
+    byDay[k].count++;
+    if(t.pnl>0) byDay[k].wins++;
+    byDay[k].pnl+=t.pnl;
+  });
+  const tradingDays=['Mon','Tue','Wed','Thu','Fri'];
+  const dayPerf = tradingDays.filter(d=>byDay[d]).map(d=>byDay[d]);
+
+  // ── Premium range buckets ─────────────────────────────────────────
+  const premBuckets={'<40':[],'40-60':[],'60-90':[],'90-120':[],'>120':[]};
+  trades.forEach(t=>{
+    const p=t.entryPrice||0;
+    const k=p<40?'<40':p<60?'40-60':p<90?'60-90':p<120?'90-120':'>120';
+    premBuckets[k].push(t);
+  });
+
+  // ── Expiry vs normal day ───────────────────────────────────────────
+  const expiryT = trades.filter(t=>t.expiry==='yes');
+  const normalT = trades.filter(t=>t.expiry!=='yes');
+  const expiryWR = expiryT.length ? Math.round(expiryT.filter(t=>t.pnl>0).length/expiryT.length*100) : null;
+  const normalWR = normalT.length ? Math.round(normalT.filter(t=>t.pnl>0).length/normalT.length*100) : null;
+
+  // ── Generate AI-style insights text ───────────────────────────────
+  const insights=[];
+  if(parseFloat(wr)>=55) insights.push({icon:'▲',col:'var(--ce)', text:`Win rate of ${wr}% is above the 55% threshold — you have a mathematical edge. Keep following the playbook.`});
+  else if(parseFloat(wr)<45) insights.push({icon:'▼',col:'var(--pe)', text:`Win rate ${wr}% is below 45%. Review your entry confirmations — you may be entering on fewer than 3 signals.`});
+  else insights.push({icon:'◈',col:'var(--amber)', text:`Win rate ${wr}% is in the neutral zone (45–55%). Focus on increasing setup quality, not trade frequency.`});
+
+  if(parseFloat(rr)>=1.5) insights.push({icon:'▲',col:'var(--ce)', text:`R:R of 1:${rr} is excellent. Your trailing SL discipline is working — winners are running longer than losers.`});
+  else if(parseFloat(rr)<1) insights.push({icon:'▼',col:'var(--pe)', text:`R:R of 1:${rr} means losses are bigger than wins. You may be exiting winners too early or holding losers too long.`});
+
+  if(ev>0) insights.push({icon:'▲',col:'var(--ce)', text:`Expected value per trade is +₹${ev.toLocaleString('en-IN')}. At 18 trades/month this projects to +₹${(ev*18).toLocaleString('en-IN')}/month.`});
+  else insights.push({icon:'▼',col:'var(--pe)', text:`Expected value is negative (₹${ev.toLocaleString('en-IN')}). Even a good win rate can't overcome a poor R:R. Let winners run.`});
+
+  const bestDay = dayPerf.length ? dayPerf.reduce((a,b)=>b.pnl>a.pnl?b:a) : null;
+  const worstDay = dayPerf.length ? dayPerf.reduce((a,b)=>b.pnl<a.pnl?b:a) : null;
+  if(bestDay) insights.push({icon:'◈',col:'var(--blue)', text:`${bestDay.day} is your most profitable day (₹${bestDay.pnl.toLocaleString('en-IN')}, ${Math.round(bestDay.wins/bestDay.count*100)}% WR). Consider being more aggressive on ${bestDay.day}.`});
+  if(worstDay && worstDay.pnl<0) insights.push({icon:'▼',col:'var(--amber)', text:`${worstDay.day} is your worst day (₹${worstDay.pnl.toLocaleString('en-IN')}). Consider trading smaller size or skipping ${worstDay.day}.`});
+
+  if(ceT.length && peT.length){
+    if(ceWR>peWR+10) insights.push({icon:'◈',col:'var(--ce)', text:`You are significantly better at CE trades (${ceWR}% WR) vs PE (${peWR}% WR). Bias towards CE setups.`});
+    else if(peWR>ceWR+10) insights.push({icon:'◈',col:'var(--pe)', text:`You are significantly better at PE trades (${peWR}% WR) vs CE (${ceWR}% WR). Bias towards PE setups.`});
+  }
+
+  if(maxCL>=3) insights.push({icon:'▼',col:'var(--pe)', text:`You had a streak of ${maxCL} consecutive losses. Per strategy rules — stop after 2 consecutive losses. Review this period.`});
+  if(maxCW>=5) insights.push({icon:'▲',col:'var(--ce)', text:`Best streak: ${maxCW} consecutive wins. Analyse what you did right during this period and replicate it.`});
+
+  const bestPremBucket = Object.entries(premBuckets)
+    .filter(([,v])=>v.length>=2)
+    .map(([k,v])=>({k,wr:Math.round(v.filter(t=>t.pnl>0).length/v.length*100),count:v.length}))
+    .sort((a,b)=>b.wr-a.wr)[0];
+  if(bestPremBucket) insights.push({icon:'◈',col:'var(--purple)', text:`Your best premium range is ₹${bestPremBucket.k} with ${bestPremBucket.wr}% WR across ${bestPremBucket.count} trades. Prioritise this range.`});
+
+  // ── Build SVG equity curve ─────────────────────────────────────────
+  function buildEquitySVG(data){
+    if(!data||data.length<2) return '<div style="color:var(--text3);font-size:11px;text-align:center;padding:20px;">Need 2+ closed trades for curve</div>';
+    const W=560,H=120,PAD=8;
+    const vals=data.map(d=>d.v);
+    const mn=Math.min(0,...vals), mx=Math.max(0,...vals);
+    const range=mx-mn||1;
+    const sx=i=>(i/(data.length-1))*(W-PAD*2)+PAD;
+    const sy=v=>H-PAD - ((v-mn)/range)*(H-PAD*2);
+    const pts=data.map((d,i)=>`${sx(i).toFixed(1)},${sy(d.v).toFixed(1)}`).join(' ');
+    const zeroY=sy(0).toFixed(1);
+    // colour based on final value
+    const lineCol=data[data.length-1].v>=0?'#00e090':'#ff5252';
+    // gradient area
+    const areaPath=`M${sx(0).toFixed(1)},${zeroY} `+data.map((d,i)=>`L${sx(i).toFixed(1)},${sy(d.v).toFixed(1)}`).join(' ')+` L${sx(data.length-1).toFixed(1)},${zeroY} Z`;
+    return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:${H}px;" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <linearGradient id="egfill" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="${lineCol}" stop-opacity="0.25"/>
+          <stop offset="100%" stop-color="${lineCol}" stop-opacity="0.02"/>
+        </linearGradient>
+      </defs>
+      <line x1="${PAD}" y1="${zeroY}" x2="${W-PAD}" y2="${zeroY}" stroke="rgba(255,255,255,0.06)" stroke-width="1"/>
+      <path d="${areaPath}" fill="url(#egfill)"/>
+      <polyline points="${pts}" fill="none" stroke="${lineCol}" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>
+    </svg>`;
+  }
+
+  // ── Build bar chart (horizontal) ───────────────────────────────────
+  function barChart(items, valFn, labelFn, colorFn){
+    if(!items.length) return '';
+    const mx=Math.max(...items.map(i=>Math.abs(valFn(i)))||[1]);
+    return items.map(item=>{
+      const v=valFn(item);
+      const pct=Math.round(Math.abs(v)/mx*100);
+      const col=colorFn(item,v);
+      return `<div style="margin-bottom:7px;">
+        <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text3);margin-bottom:3px;">
+          <span style="color:var(--text2)">${labelFn(item)}</span>
+          <span style="color:${col};font-weight:500;">${typeof v==='number'&&Math.abs(v)>100?'₹'+(v>=0?'+':'')+v.toLocaleString('en-IN'):v}</span>
+        </div>
+        <div style="background:var(--bg4);border-radius:3px;height:5px;overflow:hidden;">
+          <div style="width:${pct}%;height:100%;background:${col};border-radius:3px;transition:width .4s ease;"></div>
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  // ── Render ─────────────────────────────────────────────────────────
   el.innerHTML=`
-  <div class="g4" style="margin-bottom:12px;">
-    <div class="stat-card"><div class="stat-lbl">Total Trades</div><div class="stat-val">${total}</div></div>
-    <div class="stat-card"><div class="stat-lbl">CE Trades</div><div class="stat-val" style="color:var(--ce)">${ceC}</div><div class="stat-sub">${total?Math.round(ceC/total*100):0}%</div></div>
-    <div class="stat-card"><div class="stat-lbl">PE Trades</div><div class="stat-val" style="color:var(--pe)">${peC}</div><div class="stat-sub">${total?Math.round(peC/total*100):0}%</div></div>
-    <div class="stat-card"><div class="stat-lbl">Closed P&L</div><div class="stat-val" style="color:${pnlColor}">${totalPnl>=0?'+':''}₹${Math.abs(totalPnl).toLocaleString('en-IN')}</div><div class="stat-sub">${closed.length} closed</div></div>
+
+  <!-- ── SECTION 1: KPI ROW ── -->
+  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px;">
+    <div class="stat-card">
+      <div class="stat-lbl">Total P&L</div>
+      <div class="stat-val" style="color:${pnlColor}">${totalPnl>=0?'+':''}₹${Math.abs(totalPnl).toLocaleString('en-IN')}</div>
+      <div class="stat-sub">${rocPct}% ROC on ₹1.4L</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-lbl">Win Rate</div>
+      <div class="stat-val" style="color:${wrColor}">${wr}%</div>
+      <div class="stat-sub">${wins.length}W &nbsp;/&nbsp; ${losses.length}L &nbsp;/&nbsp; ${open.length} open</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-lbl">Expected Value / Trade</div>
+      <div class="stat-val" style="color:${evColor}">${ev>=0?'+':''}₹${Math.abs(ev).toLocaleString('en-IN')}</div>
+      <div class="stat-sub">Proj. ₹${(ev*18>=0?'+':'')}${(ev*18).toLocaleString('en-IN')}/month</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-lbl">Profit Factor</div>
+      <div class="stat-val" style="color:${parseFloat(pf)>=1.5?'var(--ce)':parseFloat(pf)<1?'var(--pe)':'var(--amber)'}">${pf}</div>
+      <div class="stat-sub">Gross win / gross loss</div>
+    </div>
   </div>
-  ${wr!==null?`<div class="g4" style="margin-bottom:12px;">
-    <div class="stat-card"><div class="stat-lbl">Win Rate</div><div class="stat-val" style="color:${wrColor}">${wr}%</div><div class="stat-sub">${wins.length}W / ${losses.length}L</div></div>
-    <div class="stat-card"><div class="stat-lbl">Avg Win</div><div class="stat-val" style="color:var(--ce)">${avgW?'+₹'+avgW.toLocaleString('en-IN'):'—'}</div></div>
-    <div class="stat-card"><div class="stat-lbl">Avg Loss</div><div class="stat-val" style="color:var(--pe)">${avgL?'-₹'+avgL.toLocaleString('en-IN'):'—'}</div></div>
-    <div class="stat-card"><div class="stat-lbl">Actual R:R</div><div class="stat-val">${rr}</div></div>
-  </div>`:''}
-  <div class="card" style="padding:14px 16px;">
-    <div class="card-hd">Trade distribution</div>
-    <table style="width:100%;border-collapse:collapse;font-size:12px;">
-      <thead><tr><th style="text-align:left;padding:4px 0;font-size:10px;color:var(--text3);">Action</th><th style="font-size:10px;color:var(--text3);">Count</th><th style="font-size:10px;color:var(--text3);">%</th></tr></thead>
-      <tbody>${setupRows}</tbody>
-    </table>
+
+  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px;">
+    <div class="stat-card">
+      <div class="stat-lbl">Actual R:R</div>
+      <div class="stat-val" style="color:${parseFloat(rr)>=1.5?'var(--ce)':parseFloat(rr)<1?'var(--pe)':'var(--amber)'}">1 : ${rr}</div>
+      <div class="stat-sub">Avg win ₹${avgW.toLocaleString('en-IN')} / Avg loss ₹${avgL.toLocaleString('en-IN')}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-lbl">Max Drawdown</div>
+      <div class="stat-val" style="color:var(--pe)">₹${maxDD.toLocaleString('en-IN')}</div>
+      <div class="stat-sub">${CAPITAL>0?((maxDD/CAPITAL)*100).toFixed(1):'—'}% of capital</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-lbl">Best Trade</div>
+      <div class="stat-val" style="color:var(--ce)">${bestTrade?'+₹'+bestTrade.pnl.toLocaleString('en-IN'):'—'}</div>
+      <div class="stat-sub">${bestTrade?bestTrade.action+' '+bestTrade.time:'—'}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-lbl">Worst Trade</div>
+      <div class="stat-val" style="color:var(--pe)">${worstTrade?'₹'+worstTrade.pnl.toLocaleString('en-IN'):'—'}</div>
+      <div class="stat-sub">${worstTrade?worstTrade.action+' '+worstTrade.time:'—'}</div>
+    </div>
+  </div>
+
+  <!-- ── SECTION 2: EQUITY CURVE ── -->
+  <div class="card" style="margin-bottom:12px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+      <div class="card-hd" style="margin:0;">Equity Curve — Cumulative P&L</div>
+      <div style="font-size:10px;color:var(--text3);">${trades.length} closed trades</div>
+    </div>
+    ${buildEquitySVG(equityCurve)}
+    <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text3);margin-top:6px;">
+      <span>Trade #1</span>
+      <span>${equityCurve.length>0?'Peak: ₹'+Math.max(0,...equityCurve.map(d=>d.v)).toLocaleString('en-IN'):''}</span>
+      <span>Trade #${trades.length}</span>
+    </div>
+  </div>
+
+  <!-- ── SECTION 3: STREAK + TRADE QUALITY ── -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">
+    <div class="card">
+      <div class="card-hd">Trade Streaks</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+        <div style="background:var(--bg3);border-radius:7px;padding:10px 12px;text-align:center;">
+          <div style="font-size:22px;font-weight:600;color:var(--ce);font-family:var(--display);">${maxCW}</div>
+          <div style="font-size:10px;color:var(--text3);margin-top:2px;">Best win streak</div>
+        </div>
+        <div style="background:var(--bg3);border-radius:7px;padding:10px 12px;text-align:center;">
+          <div style="font-size:22px;font-weight:600;color:var(--pe);font-family:var(--display);">${maxCL}</div>
+          <div style="font-size:10px;color:var(--text3);margin-top:2px;">Worst loss streak</div>
+        </div>
+      </div>
+      <div style="margin-top:10px;font-size:10px;color:var(--text3);">
+        <div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--border);">
+          <span>Total trades logged</span><span style="color:var(--text2)">${total}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--border);">
+          <span>Trades with exit logged</span><span style="color:var(--text2)">${closed.length}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;padding:4px 0;">
+          <span>Open / unlogged exits</span><span style="color:var(--amber)">${open.length}</span>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-hd">Premium Gain Distribution</div>
+      ${trades.length?`
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:5px;margin-bottom:8px;">
+        ${['>80%','>50%','>0%','<0%','<-30%'].map(label=>{
+          const count = label==='>80%' ? trades.filter(t=>t.premPct>80).length
+            : label==='>50%'  ? trades.filter(t=>t.premPct>50&&t.premPct<=80).length
+            : label==='>0%'   ? trades.filter(t=>t.premPct>0&&t.premPct<=50).length
+            : label==='<0%'   ? trades.filter(t=>t.premPct<0&&t.premPct>=-30).length
+            : trades.filter(t=>t.premPct<-30).length;
+          const pct = trades.length ? Math.round(count/trades.length*100) : 0;
+          const col = label.startsWith('>') ? 'var(--ce)' : 'var(--pe)';
+          return `<div style="background:var(--bg3);border-radius:6px;padding:7px;text-align:center;">
+            <div style="font-size:14px;font-weight:600;color:${col}">${count}</div>
+            <div style="font-size:9px;color:var(--text3);margin-top:1px;">${label}</div>
+            <div style="font-size:9px;color:var(--text3);">${pct}%</div>
+          </div>`;
+        }).join('')}
+      </div>
+      <div style="font-size:10px;color:var(--text3);">Avg premium % gain on wins: <span style="color:var(--ce)">${wins.length?'+'+Math.round(wins.reduce((a,t)=>a+t.premPct,0)/wins.length)+'%':'—'}</span></div>
+      <div style="font-size:10px;color:var(--text3);margin-top:3px;">Avg premium % loss on losses: <span style="color:var(--pe)">${losses.length?Math.round(losses.reduce((a,t)=>a+t.premPct,0)/losses.length)+'%':'—'}</span></div>
+      `:'<div style="color:var(--text3);font-size:11px;">No closed trades yet</div>'}
+    </div>
+  </div>
+
+  <!-- ── SECTION 4: CE vs PE BREAKDOWN ── -->
+  <div class="card" style="margin-bottom:12px;">
+    <div class="card-hd">CE vs PE Deep Breakdown</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+      <div>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+          <span style="font-size:13px;font-weight:600;color:var(--ce);">BUY CE</span>
+          <span style="font-size:10px;color:var(--text3);">${ceT.length} trades</span>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
+          <div style="background:var(--bg3);border-radius:6px;padding:8px 10px;">
+            <div style="font-size:10px;color:var(--text3);">Win Rate</div>
+            <div style="font-size:16px;font-weight:600;color:${ceWR>=55?'var(--ce)':ceWR>=45?'var(--amber)':'var(--pe)'}">${ceWR}%</div>
+          </div>
+          <div style="background:var(--bg3);border-radius:6px;padding:8px 10px;">
+            <div style="font-size:10px;color:var(--text3);">Total P&L</div>
+            <div style="font-size:16px;font-weight:600;color:${cePnl>=0?'var(--ce)':'var(--pe)'}">${cePnl>=0?'+':''}₹${Math.abs(cePnl).toLocaleString('en-IN')}</div>
+          </div>
+        </div>
+        <div style="margin-top:7px;background:var(--bg3);border-radius:6px;padding:8px 10px;">
+          <div style="display:flex;justify-content:space-between;font-size:10px;margin-bottom:3px;">
+            <span style="color:var(--ce)">Wins: ${ceW}</span><span style="color:var(--pe)">Losses: ${ceT.length-ceW}</span>
+          </div>
+          <div style="background:var(--bg4);border-radius:3px;height:6px;overflow:hidden;">
+            <div style="width:${ceWR}%;height:100%;background:var(--ce);border-radius:3px;"></div>
+          </div>
+        </div>
+      </div>
+      <div>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+          <span style="font-size:13px;font-weight:600;color:var(--pe);">BUY PE</span>
+          <span style="font-size:10px;color:var(--text3);">${peT.length} trades</span>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
+          <div style="background:var(--bg3);border-radius:6px;padding:8px 10px;">
+            <div style="font-size:10px;color:var(--text3);">Win Rate</div>
+            <div style="font-size:16px;font-weight:600;color:${peWR>=55?'var(--ce)':peWR>=45?'var(--amber)':'var(--pe)'}">${peWR}%</div>
+          </div>
+          <div style="background:var(--bg3);border-radius:6px;padding:8px 10px;">
+            <div style="font-size:10px;color:var(--text3);">Total P&L</div>
+            <div style="font-size:16px;font-weight:600;color:${pePnl>=0?'var(--ce)':'var(--pe)'}">${pePnl>=0?'+':''}₹${Math.abs(pePnl).toLocaleString('en-IN')}</div>
+          </div>
+        </div>
+        <div style="margin-top:7px;background:var(--bg3);border-radius:6px;padding:8px 10px;">
+          <div style="display:flex;justify-content:space-between;font-size:10px;margin-bottom:3px;">
+            <span style="color:var(--ce)">Wins: ${peW}</span><span style="color:var(--pe)">Losses: ${peT.length-peW}</span>
+          </div>
+          <div style="background:var(--bg4);border-radius:3px;height:6px;overflow:hidden;">
+            <div style="width:${peWR}%;height:100%;background:var(--pe);border-radius:3px;"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── SECTION 5: DAY OF WEEK + EXPIRY ── -->
+  <div style="display:grid;grid-template-columns:2fr 1fr;gap:8px;margin-bottom:12px;">
+    <div class="card">
+      <div class="card-hd">Performance by Day of Week</div>
+      ${dayPerf.length ? barChart(dayPerf, d=>d.pnl, d=>`${d.day}  ${d.count} trades  ${Math.round(d.wins/d.count*100)}%WR`, (d,v)=>v>=0?'var(--ce)':'var(--pe)') : '<div style="color:var(--text3);font-size:11px;">No data yet</div>'}
+    </div>
+    <div class="card">
+      <div class="card-hd">Expiry vs Normal Day</div>
+      <div style="display:grid;gap:8px;">
+        <div style="background:var(--bg3);border-radius:7px;padding:10px;">
+          <div style="font-size:10px;color:var(--text3);margin-bottom:4px;">Normal days</div>
+          <div style="font-size:18px;font-weight:600;color:${normalWR>=55?'var(--ce)':normalWR>=45?'var(--amber)':'var(--pe)'}">${normalWR!==null?normalWR+'%':'—'}</div>
+          <div style="font-size:10px;color:var(--text3);">WR · ${normalT.length} trades</div>
+        </div>
+        <div style="background:var(--bg3);border-radius:7px;padding:10px;">
+          <div style="font-size:10px;color:var(--text3);margin-bottom:4px;">Expiry (Thu)</div>
+          <div style="font-size:18px;font-weight:600;color:${expiryWR>=55?'var(--ce)':expiryWR>=45?'var(--amber)':'var(--pe)'}">${expiryWR!==null?expiryWR+'%':'—'}</div>
+          <div style="font-size:10px;color:var(--text3);">WR · ${expiryT.length} trades</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── SECTION 6: PREMIUM BUCKET ANALYSIS ── -->
+  <div class="card" style="margin-bottom:12px;">
+    <div class="card-hd">Win Rate by Entry Premium Range</div>
+    <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:6px;">
+      ${Object.entries(premBuckets).map(([k,v])=>{
+        const wr2=v.length?Math.round(v.filter(t=>t.pnl>0).length/v.length*100):0;
+        const pnl2=v.reduce((a,t)=>a+t.pnl,0);
+        const col=wr2>=55?'var(--ce)':wr2>=45?'var(--amber)':'var(--pe)';
+        return `<div style="background:var(--bg3);border-radius:7px;padding:10px;text-align:center;">
+          <div style="font-size:11px;color:var(--text3);margin-bottom:5px;">₹${k}</div>
+          <div style="font-size:18px;font-weight:600;color:${col}">${v.length?wr2+'%':'—'}</div>
+          <div style="font-size:9px;color:var(--text3);margin-top:2px;">${v.length} trades</div>
+          <div style="font-size:9px;color:${pnl2>=0?'var(--ce)':'var(--pe)'};margin-top:1px;">${v.length?'₹'+(pnl2>=0?'+':'')+pnl2.toLocaleString('en-IN'):'—'}</div>
+        </div>`;
+      }).join('')}
+    </div>
+  </div>
+
+  <!-- ── SECTION 7: PLAYBOOK ROW PERFORMANCE ── -->
+  <div class="card" style="margin-bottom:12px;">
+    <div class="card-hd">Playbook Category Performance</div>
+    ${rowPerf.length ? barChart(rowPerf, r=>r.pnl,
+      r=>`${r.name.length>40?r.name.slice(0,40)+'…':r.name}  (${r.count}t · ${Math.round(r.wins/r.count*100)}%WR)`,
+      (r,v)=>v>=0?'var(--ce)':'var(--pe)') : '<div style="color:var(--text3);font-size:11px;">No data</div>'}
+  </div>
+
+  <!-- ── SECTION 8: AI INSIGHTS ── -->
+  <div class="card" style="margin-bottom:12px;">
+    <div class="card-hd">Strategy Insights &amp; Recommendations</div>
+    <div style="display:flex;flex-direction:column;gap:8px;">
+      ${insights.map(ins=>`
+        <div style="display:flex;gap:10px;align-items:flex-start;padding:9px 11px;background:var(--bg3);border-radius:7px;border-left:2px solid ${ins.col};">
+          <span style="color:${ins.col};font-size:11px;flex-shrink:0;margin-top:1px;">${ins.icon}</span>
+          <span style="font-size:12px;color:var(--text2);line-height:1.6;">${ins.text}</span>
+        </div>`).join('')}
+    </div>
+  </div>
+
+  <!-- ── SECTION 9: RECENT TRADE LOG ── -->
+  <div class="card">
+    <div class="card-hd">Last 10 Closed Trades</div>
+    <div style="overflow-x:auto;">
+      <table style="width:100%;border-collapse:collapse;font-size:11px;">
+        <thead>
+          <tr>
+            <th style="text-align:left;padding:5px 8px;font-size:9px;color:var(--text3);border-bottom:1px solid var(--border);">Date</th>
+            <th style="text-align:left;padding:5px 8px;font-size:9px;color:var(--text3);border-bottom:1px solid var(--border);">Action</th>
+            <th style="text-align:left;padding:5px 8px;font-size:9px;color:var(--text3);border-bottom:1px solid var(--border);">Setup</th>
+            <th style="text-align:right;padding:5px 8px;font-size:9px;color:var(--text3);border-bottom:1px solid var(--border);">Entry</th>
+            <th style="text-align:right;padding:5px 8px;font-size:9px;color:var(--text3);border-bottom:1px solid var(--border);">Exit</th>
+            <th style="text-align:right;padding:5px 8px;font-size:9px;color:var(--text3);border-bottom:1px solid var(--border);">% Move</th>
+            <th style="text-align:right;padding:5px 8px;font-size:9px;color:var(--text3);border-bottom:1px solid var(--border);">P&amp;L</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${trades.slice(-10).reverse().map(t=>`
+            <tr>
+              <td style="padding:6px 8px;color:var(--text3);border-bottom:1px solid var(--border);">${t.time}</td>
+              <td style="padding:6px 8px;border-bottom:1px solid var(--border);"><span style="color:${t.style==='ce'?'var(--ce)':'var(--pe)'};font-weight:600;">${t.action}</span></td>
+              <td style="padding:6px 8px;color:var(--text2);border-bottom:1px solid var(--border);max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${(t.setup||'').split('—')[0].trim()}</td>
+              <td style="padding:6px 8px;text-align:right;color:var(--text2);border-bottom:1px solid var(--border);">₹${t.entryPrice}</td>
+              <td style="padding:6px 8px;text-align:right;color:var(--text2);border-bottom:1px solid var(--border);">₹${t.exitPrice}</td>
+              <td style="padding:6px 8px;text-align:right;color:${t.premPct>=0?'var(--ce)':'var(--pe)'};border-bottom:1px solid var(--border);">${t.premPct>=0?'+':''}${t.premPct}%</td>
+              <td style="padding:6px 8px;text-align:right;font-weight:600;color:${t.pnl>=0?'var(--ce)':'var(--pe)'};border-bottom:1px solid var(--border);">${t.pnl>=0?'+':''}₹${Math.abs(t.pnl).toLocaleString('en-IN')}</td>
+            </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>
   </div>`;
 }
 

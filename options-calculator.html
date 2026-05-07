@@ -1,0 +1,623 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Options Position Manager</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #080a0f;
+  --s1: #0e1118;
+  --s2: #141820;
+  --s3: #1a1f2c;
+  --border: #1e2535;
+  --green: #00d97e;
+  --blue: #3d8ef8;
+  --red: #f84f4f;
+  --yellow: #f8b84f;
+  --purple: #a78bfa;
+  --text: #dde2f0;
+  --muted: #4a5368;
+  --mono: 'IBM Plex Mono', monospace;
+  --head: 'Syne', sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:var(--mono);min-height:100vh;padding:20px 16px 80px;
+  background-image:radial-gradient(ellipse 50% 35% at 85% 5%,rgba(0,217,126,.06) 0,transparent 60%),
+  radial-gradient(ellipse 40% 30% at 5% 90%,rgba(61,142,248,.05) 0,transparent 60%)}
+
+/* ── Layout ── */
+.wrap{max-width:900px;margin:0 auto}
+header{margin-bottom:28px}
+.logo{display:flex;align-items:center;gap:10px;margin-bottom:3px}
+.logo-box{width:34px;height:34px;background:linear-gradient(135deg,var(--green),var(--blue));border-radius:8px;
+  display:flex;align-items:center;justify-content:center;font-size:17px}
+h1{font-family:var(--head);font-size:21px;font-weight:700;letter-spacing:-.3px}
+.sub{font-size:11px;color:var(--muted);margin-left:44px;letter-spacing:.5px}
+
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+@media(max-width:580px){.row2{grid-template-columns:1fr}}
+.row3{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:14px}
+@media(max-width:580px){.row3{grid-template-columns:1fr 1fr}}
+
+/* ── Cards ── */
+.card{background:var(--s1);border:1px solid var(--border);border-radius:12px;padding:18px 20px}
+.card-title{font-size:10px;font-weight:600;letter-spacing:1.8px;text-transform:uppercase;
+  color:var(--muted);margin-bottom:16px;font-family:var(--head)}
+
+/* ── Fields ── */
+.field{margin-bottom:13px}
+.field:last-child{margin-bottom:0}
+label{display:block;font-size:11px;color:var(--muted);margin-bottom:5px;letter-spacing:.4px}
+input[type=number]{width:100%;background:var(--s2);border:1px solid var(--border);border-radius:7px;
+  color:var(--text);font-family:var(--mono);font-size:14px;padding:9px 11px;outline:none;
+  transition:border-color .18s;-moz-appearance:textfield}
+input[type=number]::-webkit-inner-spin-button,
+input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none}
+input[type=number]:focus{border-color:var(--green)}
+.hint{font-size:10px;color:var(--muted);margin-top:4px}
+
+/* ── Risk bar ── */
+.rbar-row{display:flex;justify-content:space-between;font-size:10px;color:var(--muted);margin-top:10px;margin-bottom:4px}
+.rbar-bg{height:5px;background:var(--s3);border-radius:3px;overflow:hidden}
+.rbar-fill{height:100%;border-radius:3px;background:linear-gradient(90deg,var(--green),var(--blue));transition:width .3s}
+.rbar-fill.over{background:var(--red)}
+
+/* ── Buttons ── */
+.btn-primary{display:block;width:100%;background:linear-gradient(135deg,var(--green),#00b06a);
+  color:#001a10;font-family:var(--head);font-size:13px;font-weight:700;letter-spacing:1px;
+  text-transform:uppercase;border:none;border-radius:9px;padding:13px;cursor:pointer;
+  transition:opacity .2s,transform .1s;margin:14px 0 0}
+.btn-primary:hover{opacity:.9}
+.btn-primary:active{transform:scale(.99)}
+.btn-add{background:rgba(61,142,248,.12);color:var(--blue);border:1px solid rgba(61,142,248,.25);
+  border-radius:7px;font-family:var(--mono);font-size:12px;font-weight:600;padding:9px 14px;
+  cursor:pointer;white-space:nowrap;transition:background .18s;letter-spacing:.3px}
+.btn-add:hover{background:rgba(61,142,248,.22)}
+.btn-sm{background:none;border:1px solid var(--border);color:var(--muted);border-radius:5px;
+  font-family:var(--mono);font-size:11px;padding:4px 8px;cursor:pointer;transition:all .15s}
+.btn-sm:hover{border-color:var(--red);color:var(--red)}
+.btn-action{background:rgba(248,184,79,.1);color:var(--yellow);border:1px solid rgba(248,184,79,.25);
+  border-radius:6px;font-size:11px;font-family:var(--mono);padding:5px 10px;cursor:pointer;
+  transition:background .15s;white-space:nowrap}
+.btn-action:hover{background:rgba(248,184,79,.2)}
+.btn-cut{background:rgba(248,79,79,.1);color:var(--red);border:1px solid rgba(248,79,79,.25)}
+.btn-cut:hover{background:rgba(248,79,79,.2)}
+
+/* ── Stat boxes ── */
+.stat{background:var(--s1);border:1px solid var(--border);border-radius:10px;padding:13px 15px}
+.stat-lbl{font-size:9px;color:var(--muted);letter-spacing:1.2px;text-transform:uppercase;margin-bottom:6px;font-family:var(--head)}
+.stat-val{font-size:20px;font-weight:700;color:var(--green)}
+.stat-val.red{color:var(--red)}
+.stat-val.yel{color:var(--yellow)}
+.stat-val.blu{color:var(--blue)}
+.stat-val.pur{color:var(--purple)}
+.stat-sub{font-size:10px;color:var(--muted);margin-top:3px}
+
+/* ── Section header ── */
+.sec-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px}
+.sec-title{font-size:10px;font-weight:600;letter-spacing:1.8px;text-transform:uppercase;color:var(--muted);font-family:var(--head)}
+.pill{font-size:10px;font-family:var(--mono);padding:3px 9px;border-radius:20px;
+  background:rgba(0,217,126,.08);color:var(--green);border:1px solid rgba(0,217,126,.18)}
+.pill.blu{background:rgba(61,142,248,.08);color:var(--blue);border-color:rgba(61,142,248,.18)}
+.pill.red{background:rgba(248,79,79,.08);color:var(--red);border-color:rgba(248,79,79,.18)}
+.pill.yel{background:rgba(248,184,79,.08);color:var(--yellow);border-color:rgba(248,184,79,.18)}
+
+/* ── Tables ── */
+table{width:100%;border-collapse:collapse;font-size:12px}
+th{text-align:left;padding:7px 10px;color:var(--muted);font-size:9px;letter-spacing:.8px;
+  text-transform:uppercase;border-bottom:1px solid var(--border);font-family:var(--head)}
+td{padding:10px 10px;border-bottom:1px solid rgba(30,37,53,.6);vertical-align:middle}
+tr:last-child td{border-bottom:none}
+tr.row-entry{background:rgba(0,217,126,.03)}
+tr.row-add{background:rgba(61,142,248,.03)}
+tr.row-exit{background:rgba(248,79,79,.03)}
+.tag{display:inline-block;font-size:9px;padding:2px 6px;border-radius:4px;font-weight:700;letter-spacing:.5px}
+.tag-e{background:rgba(0,217,126,.15);color:var(--green)}
+.tag-a{background:rgba(61,142,248,.15);color:var(--blue)}
+.tag-x{background:rgba(248,79,79,.15);color:var(--red)}
+.tag-tp{background:rgba(167,139,250,.15);color:var(--purple)}
+
+/* ── Add-row input strip ── */
+.input-strip{display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-top:14px}
+.input-strip .field{flex:1;min-width:110px;margin:0}
+
+/* ── Info box ── */
+.infobox{background:rgba(61,142,248,.05);border:1px solid rgba(61,142,248,.12);
+  border-radius:8px;padding:13px 15px;font-size:12px;color:#7ca8d8;line-height:1.7;margin-top:13px}
+.infobox strong{color:var(--blue)}
+.infobox .hl-green{color:var(--green);font-weight:700}
+.infobox .hl-red{color:var(--red);font-weight:700}
+.infobox .hl-yel{color:var(--yellow);font-weight:700}
+.infobox .hl-pur{color:var(--purple);font-weight:700}
+
+/* ── Position summary banner ── */
+.pos-banner{background:var(--s2);border:1px solid var(--border);border-radius:10px;
+  padding:14px 16px;margin-bottom:14px;display:flex;flex-wrap:wrap;gap:16px;align-items:center}
+.pos-item{display:flex;flex-direction:column;gap:3px}
+.pos-item .lbl{font-size:9px;color:var(--muted);letter-spacing:1px;text-transform:uppercase;font-family:var(--head)}
+.pos-item .val{font-size:15px;font-weight:700}
+
+/* ── Net P&L running total ── */
+.pnl-strip{background:var(--s3);border-radius:8px;padding:10px 14px;margin-top:12px;
+  display:flex;gap:20px;flex-wrap:wrap;align-items:center}
+.pnl-item .lbl{font-size:9px;color:var(--muted);letter-spacing:.8px;text-transform:uppercase}
+.pnl-item .val{font-size:14px;font-weight:700}
+
+.empty{text-align:center;padding:36px;color:var(--muted);font-size:12px}
+.divider{height:1px;background:var(--border);margin:16px 0}
+.gap{margin-top:14px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div class="logo">
+    <div class="logo-box">📊</div>
+    <h1>Options Position Manager</h1>
+  </div>
+  <div class="sub">// SIZE · PYRAMID · TARGET · PARTIAL EXITS → LIVE RISK RECALC</div>
+</header>
+
+<!-- ── SETUP ── -->
+<div class="row2" id="setupGrid">
+  <div class="card">
+    <div class="card-title">Account</div>
+    <div class="field"><label>Capital (₹)</label>
+      <input type="number" id="capital" value="100000" min="1000" step="1000"></div>
+    <div class="field"><label>Max Risk Per Day (₹)</label>
+      <input type="number" id="riskPerDay" value="2000" min="100" step="100"></div>
+    <div class="rbar-row"><span>Risk % of capital</span><span id="riskPct">2.00%</span></div>
+    <div class="rbar-bg"><div class="rbar-fill" id="riskBar" style="width:2%"></div></div>
+  </div>
+  <div class="card">
+    <div class="card-title">Trade Setup</div>
+    <div class="field"><label>Entry Premium (₹)</label>
+      <input type="number" id="premium" value="100" min="0.5" step="0.5"></div>
+    <div class="field"><label>Target Price (₹)</label>
+      <input type="number" id="target" value="150" min="0.5" step="0.5">
+      <div class="hint">Price at which you plan to exit</div></div>
+    <div class="row2" style="gap:10px;margin-bottom:13px">
+      <div class="field" style="margin:0"><label>Lot Size</label>
+        <input type="number" id="lotSize" value="65" min="1" step="1"></div>
+      <div class="field" style="margin:0"><label>SL % of Premium</label>
+        <input type="number" id="slPct" value="10" min="1" max="100" step="1"></div>
+    </div>
+    <div class="hint">SL = ₹<span id="slPreview">10.00</span> below entry &nbsp;|&nbsp; Target = ₹<span id="tgtPreview">50.00</span> above entry</div>
+  </div>
+</div>
+
+<button class="btn-primary" id="calcBtn">⚡ Calculate Base Position</button>
+
+<!-- ── RESULTS ── -->
+<div id="resultsSection" style="display:none;margin-top:14px">
+
+  <!-- Base stats -->
+  <div class="row3" id="baseStats"></div>
+
+  <!-- ── PYRAMID SECTION ── -->
+  <div class="card gap">
+    <div class="sec-head">
+      <div class="sec-title">Pyramiding — Add to Winners</div>
+      <span class="pill blu">entries as trade moves in your favour</span>
+    </div>
+
+    <div class="input-strip">
+      <div class="field"><label>Add at Price (₹)</label>
+        <input type="number" id="pyrPrice" step="0.5" placeholder="e.g. 120"></div>
+      <div class="field"><label>Lots to Add</label>
+        <input type="number" id="pyrLots" min="1" value="1"></div>
+      <div class="field"><label>Target for this add (₹)</label>
+        <input type="number" id="pyrTarget" step="0.5" placeholder="optional — uses main target"></div>
+      <button class="btn-add" id="addPyrBtn">+ Add Level</button>
+    </div>
+
+    <div class="gap" id="pyrTableWrap">
+      <div class="empty">Add pyramid levels above ↑ to see SL trail plan</div>
+    </div>
+    <div class="infobox" id="pyrInfo" style="display:none"></div>
+  </div>
+
+  <!-- ── LIVE POSITION MANAGER ── -->
+  <div class="card gap">
+    <div class="sec-head">
+      <div class="sec-title">Live Position Manager</div>
+      <span class="pill yel">book partial profits / cut partial losses → SL recalculates</span>
+    </div>
+
+    <!-- Running position summary -->
+    <div class="pos-banner" id="posBanner"></div>
+
+    <!-- Add exit event -->
+    <div class="input-strip">
+      <div class="field"><label>Exit Price (₹)</label>
+        <input type="number" id="exitPrice" step="0.5" placeholder="e.g. 140"></div>
+      <div class="field"><label>Lots to Close</label>
+        <input type="number" id="exitLots" min="1" value="1"></div>
+      <div style="display:flex;gap:8px;align-items:flex-end;padding-bottom:1px">
+        <button class="btn-action" id="exitProfitBtn">✅ Book Profit</button>
+        <button class="btn-action btn-cut" id="exitLossBtn">✂️ Cut Loss</button>
+      </div>
+    </div>
+
+    <div class="gap" id="exitTableWrap">
+      <div class="empty">No exits recorded yet — position is fully open</div>
+    </div>
+
+    <!-- Net P&L strip -->
+    <div class="pnl-strip" id="pnlStrip" style="display:none"></div>
+  </div>
+
+</div><!-- end resultsSection -->
+</div><!-- end wrap -->
+
+<script>
+// ── State ──
+let S = {
+  capital:0, risk:0, premium:0, target:0, lotSize:65, slPct:10,
+  baseLots:0, baseSL:0,
+  pyrEntries:[],   // [{price, lots, target|null}]
+  exits:[]         // [{price, lots, type:'profit'|'loss', pnl}]
+};
+
+// ── Helpers ──
+const $ = id => document.getElementById(id);
+const fmt = (n,d=2) => '₹'+Number(n).toLocaleString('en-IN',{minimumFractionDigits:d,maximumFractionDigits:d});
+const fmtP = n => (n>=0?'<span style="color:var(--green)">+'+fmt(n)+'</span>':'<span style="color:var(--red)">'+fmt(n)+'</span>');
+
+function livePreviews() {
+  const p = parseFloat($('premium').value)||0;
+  const sl = parseFloat($('slPct').value)||10;
+  const t = parseFloat($('target').value)||0;
+  $('slPreview').textContent = (p*sl/100).toFixed(2);
+  $('tgtPreview').textContent = Math.max(0,t-p).toFixed(2);
+  // risk bar
+  const cap = parseFloat($('capital').value)||1;
+  const risk = parseFloat($('riskPerDay').value)||0;
+  const pct = Math.min(risk/cap*100,100);
+  $('riskBar').style.width=pct+'%';
+  $('riskPct').textContent=(risk/cap*100).toFixed(2)+'%';
+  $('riskBar').className='rbar-fill'+(pct>5?' over':'');
+}
+['premium','slPct','target','capital','riskPerDay'].forEach(id=>$(id).addEventListener('input',livePreviews));
+livePreviews();
+
+// ── Core calc: given open lots + their cost basis, what is SL to keep risk = budget ──
+// SL = (totalCostBasis - remainingRiskBudget/lotSize) / openLots
+// loss if SL hits = (avgCost - SL) * openLots * lotSize = remainingRiskBudget ✓
+function calcSL(openLots, totalCostBasis, remainingRisk, lotSize) {
+  if(openLots<=0) return null;
+  return (totalCostBasis - remainingRisk/lotSize) / openLots;
+}
+
+// Profit if all open lots hit target
+function calcTargetProfit(openLots, totalCostBasis, targetPrice, lotSize) {
+  const avgCost = totalCostBasis/openLots;
+  return (targetPrice - avgCost) * openLots * lotSize;
+}
+
+// ── 1. CALCULATE BASE ──
+function calculate() {
+  S.capital   = parseFloat($('capital').value)||0;
+  S.risk       = parseFloat($('riskPerDay').value)||0;
+  S.premium    = parseFloat($('premium').value)||0;
+  S.target     = parseFloat($('target').value)||0;
+  S.lotSize    = parseInt($('lotSize').value)||65;
+  S.slPct      = parseFloat($('slPct').value)||10;
+  S.pyrEntries = [];
+  S.exits      = [];
+
+  if(!S.capital||!S.risk||!S.premium){alert('Fill capital, risk and premium.');return;}
+  if(S.target<=S.premium){alert('Target must be above entry premium.');return;}
+
+  const slPerUnit = S.premium * S.slPct/100;
+  const slPerLot  = slPerUnit * S.lotSize;
+  S.baseLots = Math.floor(S.risk/slPerLot);
+  S.baseSL   = S.premium - slPerUnit;
+
+  if(S.baseLots<1){alert('Risk budget too small for even 1 lot at this SL. Increase risk or reduce SL%.');return;}
+
+  const actualRisk   = S.baseLots * slPerLot;
+  const targetProfit = (S.target - S.premium) * S.baseLots * S.lotSize;
+  const rr           = targetProfit / actualRisk;
+
+  $('baseStats').innerHTML=`
+    <div class="stat"><div class="stat-lbl">Lots to Buy</div>
+      <div class="stat-val">${S.baseLots}</div>
+      <div class="stat-sub">${S.baseLots}×${S.lotSize} = ${S.baseLots*S.lotSize} units</div></div>
+    <div class="stat"><div class="stat-lbl">SL Price</div>
+      <div class="stat-val yel">${fmt(S.baseSL)}</div>
+      <div class="stat-sub">Max loss ${fmt(actualRisk)}</div></div>
+    <div class="stat"><div class="stat-lbl">Target Profit</div>
+      <div class="stat-val">${fmt(targetProfit)}</div>
+      <div class="stat-sub">R:R = 1 : ${rr.toFixed(2)}</div></div>`;
+
+  $('resultsSection').style.display='block';
+  renderAll();
+  $('resultsSection').scrollIntoView({behavior:'smooth',block:'start'});
+}
+
+// ── 2. BUILD FULL OPEN POSITION STATE ──
+// Takes into account: base + pyramids - exits
+// Returns { openEntries[{price,lots}], totalOpenLots, totalCostBasis, lockedPnl }
+function buildPosition() {
+  // Start with all entries
+  let entries = [
+    {price:S.premium, lots:S.baseLots},
+    ...S.pyrEntries.map(e=>({price:e.price, lots:e.lots}))
+  ];
+  // Apply exits FIFO against entries (cheapest first = base, then adds)
+  let lotsToExit = S.exits.reduce((a,x)=>a+x.lots,0);
+  let lockedPnl  = S.exits.reduce((a,x)=>a+x.pnl,0);
+
+  let remaining = entries.map(e=>({...e}));
+  for(let x of S.exits) {
+    let left = x.lots;
+    for(let r of remaining) {
+      if(left<=0) break;
+      const take = Math.min(r.lots, left);
+      r.lots -= take;
+      left   -= take;
+    }
+  }
+  remaining = remaining.filter(r=>r.lots>0);
+
+  const totalOpenLots   = remaining.reduce((a,r)=>a+r.lots,0);
+  const totalCostBasis  = remaining.reduce((a,r)=>a+r.lots*r.price,0);
+  return {remaining, totalOpenLots, totalCostBasis, lockedPnl};
+}
+
+// ── 3. RENDER PYRAMID TABLE ──
+function renderPyr() {
+  const wrap = $('pyrTableWrap');
+  const info = $('pyrInfo');
+
+  // Build stages
+  const allEntries = [
+    {price:S.premium, lots:S.baseLots, target:S.target, type:'entry'},
+    ...S.pyrEntries.map((e,i)=>({...e, target:e.target||S.target, type:'add', idx:i}))
+  ];
+
+  if(allEntries.length===1){
+    wrap.innerHTML='<div class="empty">Add pyramid levels above ↑ to see SL trail plan</div>';
+    info.style.display='none';
+    return;
+  }
+
+  let cumLots=0, cumCost=0, stages=[];
+  for(let e of allEntries){
+    cumLots += e.lots;
+    cumCost += e.lots*e.price;
+    const avgPrice = cumCost/cumLots;
+    const sl = calcSL(cumLots, cumCost, S.risk, S.lotSize);
+    const tgtProfit = (e.target - avgPrice)*cumLots*S.lotSize;
+    const maxLoss   = (avgPrice-sl)*cumLots*S.lotSize;
+    const rr        = tgtProfit/maxLoss;
+    stages.push({e, cumLots, cumCost, avgPrice, sl, tgtProfit, maxLoss, rr});
+  }
+
+  let html=`<table><thead><tr>
+    <th>Step</th><th>Action</th><th>At Price</th><th>Lots</th><th>Total Lots</th>
+    <th>Avg Cost</th><th>Move SL to</th><th>Max Loss</th><th>Target P&L</th><th>R:R</th><th></th>
+  </tr></thead><tbody>`;
+
+  stages.forEach((s,i)=>{
+    const isBase = s.e.type==='entry';
+    const slOk   = s.sl>0;
+    const slTxt  = isBase
+      ? `<span style="color:var(--yellow);font-weight:700">${fmt(S.baseSL)}</span>`
+      : slOk
+        ? `<span style="color:var(--yellow);font-weight:700">${fmt(s.sl)}</span>`
+        : `<span style="color:var(--red)">SL below 0 — reduce lots</span>`;
+    const rem = isBase?'':
+      `<button class="btn-sm" data-pidx="${s.e.idx}">✕ Remove</button>`;
+    const tag = isBase?'<span class="tag tag-e">ENTRY</span>':'<span class="tag tag-a">ADD</span>';
+    const rrColor = s.rr>=2?'var(--green)':s.rr>=1?'var(--yellow)':'var(--red)';
+
+    html+=`<tr class="${isBase?'row-entry':'row-add'}">
+      <td style="color:var(--muted);font-weight:600">${isBase?'Base':'Add '+i}</td>
+      <td>${tag}</td>
+      <td style="font-weight:600">${fmt(s.e.price)}</td>
+      <td style="color:${isBase?'var(--green)':'var(--blue)'}">+${s.e.lots}</td>
+      <td style="font-weight:700">${s.cumLots}</td>
+      <td style="color:var(--muted)">${fmt(s.avgPrice)}</td>
+      <td>${slTxt}</td>
+      <td style="color:var(--red)">${fmt(s.maxLoss)}</td>
+      <td style="color:var(--green)">${fmt(s.tgtProfit)}</td>
+      <td style="color:${rrColor};font-weight:700">1:${s.rr.toFixed(2)}</td>
+      <td>${rem}</td>
+    </tr>`;
+  });
+  html+=`</tbody></table>`;
+  wrap.innerHTML=html;
+
+  // Plain-english summary
+  let txt='';
+  const baseSLtxt = fmt(S.baseSL);
+  txt+=`<strong>Base entry ${fmt(S.premium)}</strong> — SL at <span class="hl-yel">${baseSLtxt}</span>, max loss <span class="hl-red">${fmt(stages[0].maxLoss)}</span>, target profit <span class="hl-green">${fmt(stages[0].tgtProfit)}</span> (R:R 1:${stages[0].rr.toFixed(2)}).<br><br>`;
+  stages.slice(1).forEach((s,i)=>{
+    const prev=stages[i];
+    if(s.sl>0){
+      txt+=`<strong>After adding ${s.e.lots} lot(s) at ${fmt(s.e.price)}</strong> → move SL from <span class="hl-yel">${fmt(prev.sl)}</span> to <span class="hl-yel">${fmt(s.sl)}</span>. `+
+        `Now ${s.cumLots} lots, avg cost ${fmt(s.avgPrice)}, max loss stays <span class="hl-red">${fmt(s.maxLoss)}</span>, target profit <span class="hl-green">${fmt(s.tgtProfit)}</span> (R:R 1:${s.rr.toFixed(2)}).<br><br>`;
+    } else {
+      txt+=`<strong style="color:var(--red)">Adding ${s.e.lots} lot(s) at ${fmt(s.e.price)} pushes SL below zero — too many lots for ₹${S.risk.toLocaleString('en-IN')} budget.</strong><br><br>`;
+    }
+  });
+  info.innerHTML=txt;
+  info.style.display='block';
+}
+
+// ── 4. RENDER LIVE POSITION MANAGER ──
+function renderManager() {
+  const {remaining, totalOpenLots, totalCostBasis, lockedPnl} = buildPosition();
+  const openAvg = totalOpenLots>0 ? totalCostBasis/totalOpenLots : 0;
+
+  // Remaining risk budget = original risk - locked losses (locked profit reduces NOTHING, it's booked)
+  // Key insight: after partial exits, the SL for remaining position should still protect the ORIGINAL risk budget
+  // because booked profits offset future losses. The remaining risk you can afford = S.risk + lockedPnl
+  // (if you booked ₹1000 profit, you can afford ₹1000 more loss on remainder and still net break even on the day)
+  const remainingRisk = Math.max(0, S.risk + lockedPnl);
+  const newSL = totalOpenLots>0 ? calcSL(totalOpenLots, totalCostBasis, remainingRisk, S.lotSize) : null;
+  const tgtPnl = totalOpenLots>0 ? (S.target - openAvg)*totalOpenLots*S.lotSize : 0;
+  const maxLoss = totalOpenLots>0 && newSL ? (openAvg-newSL)*totalOpenLots*S.lotSize : 0;
+
+  // Banner
+  const banner = $('posBanner');
+  if(totalOpenLots>0){
+    const rrNew = maxLoss>0?tgtPnl/maxLoss:0;
+    banner.innerHTML=`
+      <div class="pos-item"><div class="lbl">Open Lots</div><div class="val" style="color:var(--blue)">${totalOpenLots}</div></div>
+      <div class="pos-item"><div class="lbl">Avg Cost</div><div class="val">${fmt(openAvg)}</div></div>
+      <div class="pos-item"><div class="lbl">SL now at</div><div class="val" style="color:var(--yellow)">${newSL!==null&&newSL>0?fmt(newSL):'N/A'}</div></div>
+      <div class="pos-item"><div class="lbl">Max Loss (remaining)</div><div class="val" style="color:var(--red)">${fmt(maxLoss)}</div></div>
+      <div class="pos-item"><div class="lbl">Target P&L (remaining)</div><div class="val" style="color:var(--green)">${fmt(tgtPnl)}</div></div>
+      <div class="pos-item"><div class="lbl">Locked P&L</div><div class="val" style="color:${lockedPnl>=0?'var(--green)':'var(--red)'}">${lockedPnl>=0?'+':''}${fmt(lockedPnl)}</div></div>
+      <div class="pos-item"><div class="lbl">R:R (remaining)</div><div class="val" style="color:${rrNew>=2?'var(--green)':rrNew>=1?'var(--yellow)':'var(--red)'}">${maxLoss>0?'1:'+rrNew.toFixed(2):'—'}</div></div>`;
+  } else {
+    banner.innerHTML=`<div style="color:var(--muted);font-size:12px;width:100%">Position fully closed. Net P&L: ${fmtP(lockedPnl)}</div>`;
+  }
+
+  // Exits table
+  const wrap = $('exitTableWrap');
+  if(S.exits.length===0){
+    wrap.innerHTML='<div class="empty">No exits recorded yet — position is fully open</div>';
+    $('pnlStrip').style.display='none';
+    return;
+  }
+
+  let html=`<table><thead><tr>
+    <th>#</th><th>Type</th><th>Exit Price</th><th>Lots Closed</th><th>P&L on Exit</th>
+    <th>Remaining Lots</th><th>New SL</th><th>Remaining Risk Budget</th><th></th>
+  </tr></thead><tbody>`;
+
+  let runLots=S.baseLots+S.pyrEntries.reduce((a,e)=>a+e.lots,0);
+  let runCost=S.premium*S.baseLots+S.pyrEntries.reduce((a,e)=>a+e.lots*e.price,0);
+  let runPnl=0;
+
+  // We need per-exit running state
+  // Rebuild FIFO per exit
+  let entryQueue = [
+    {price:S.premium, lots:S.baseLots},
+    ...S.pyrEntries.map(e=>({price:e.price, lots:e.lots}))
+  ].map(e=>({...e}));
+
+  S.exits.forEach((x,xi)=>{
+    // FIFO cost of exited lots
+    let left=x.lots;
+    let costOfExited=0;
+    let tempQ=entryQueue.map(e=>({...e}));
+    for(let r of entryQueue){
+      if(left<=0)break;
+      const take=Math.min(r.lots,left);
+      costOfExited+=take*r.price;
+      r.lots-=take;
+      left-=take;
+    }
+    entryQueue=entryQueue.filter(r=>r.lots>0);
+    const pnlThis=(x.price - costOfExited/x.lots)*x.lots*S.lotSize;
+    runPnl+=pnlThis;
+
+    const openLotsNow=entryQueue.reduce((a,r)=>a+r.lots,0);
+    const openCostNow=entryQueue.reduce((a,r)=>a+r.lots*r.price,0);
+    const remRisk=Math.max(0,S.risk+runPnl);
+    const slNow=openLotsNow>0?calcSL(openLotsNow,openCostNow,remRisk,S.lotSize):null;
+    const isProfit=pnlThis>=0;
+    const slTxt=slNow!==null&&slNow>0
+      ?`<span style="color:var(--yellow);font-weight:700">${fmt(slNow)}</span>`
+      :openLotsNow>0?`<span style="color:var(--green)">Risk-free</span>`:'Closed';
+
+    html+=`<tr class="${isProfit?'row-add':'row-exit'}">
+      <td style="color:var(--muted)">${xi+1}</td>
+      <td><span class="tag ${isProfit?'tag-tp':'tag-x'}">${isProfit?'PROFIT':'LOSS'}</span></td>
+      <td style="font-weight:600">${fmt(x.price)}</td>
+      <td style="color:${isProfit?'var(--purple)':'var(--red)'}">-${x.lots}</td>
+      <td style="${isProfit?'color:var(--green)':'color:var(--red)'};font-weight:700">${isProfit?'+':''}${fmt(pnlThis)}</td>
+      <td style="font-weight:700">${openLotsNow}</td>
+      <td>${slTxt}</td>
+      <td>${fmt(remRisk)}</td>
+      <td><button class="btn-sm" data-xidx="${xi}">✕</button></td>
+    </tr>`;
+  });
+
+  html+=`</tbody></table>`;
+  wrap.innerHTML=html;
+
+  // P&L strip
+  const totalOpen=entryQueue.reduce((a,r)=>a+r.lots,0);
+  const strip=$('pnlStrip');
+  strip.style.display='flex';
+  strip.innerHTML=`
+    <div class="pnl-item"><div class="lbl">Locked P&L</div>
+      <div class="val" style="color:${lockedPnl>=0?'var(--green)':'var(--red)'}">${lockedPnl>=0?'+':''}${fmt(lockedPnl)}</div></div>
+    <div class="pnl-item"><div class="lbl">Lots Still Open</div>
+      <div class="val" style="color:var(--blue)">${totalOpenLots}</div></div>
+    <div class="pnl-item"><div class="lbl">Remaining Risk Budget</div>
+      <div class="val" style="color:var(--yellow)">${fmt(remainingRisk)}</div></div>
+    <div class="pnl-item"><div class="lbl">Day's Net if Target Hit</div>
+      <div class="val" style="color:var(--green)">${fmt(lockedPnl+tgtPnl)}</div></div>
+    <div class="pnl-item"><div class="lbl">Day's Net if SL Hit</div>
+      <div class="val" style="color:${lockedPnl-maxLoss>=0?'var(--green)':'var(--red)'}">${fmt(lockedPnl-maxLoss)}</div></div>`;
+}
+
+function renderAll(){
+  renderPyr();
+  renderManager();
+}
+
+// ── Events ──
+$('calcBtn').addEventListener('click', calculate);
+
+$('addPyrBtn').addEventListener('click',()=>{
+  const price=parseFloat($('pyrPrice').value);
+  const lots=parseInt($('pyrLots').value)||1;
+  const target=parseFloat($('pyrTarget').value)||null;
+  if(!price||!S.baseLots){alert('Calculate base position first.');return;}
+  if(price<=S.premium){alert('Pyramid price must be above entry price.');return;}
+  S.pyrEntries.push({price,lots,target,idx:S.pyrEntries.length});
+  S.pyrEntries.sort((a,b)=>a.price-b.price);
+  // Re-index
+  S.pyrEntries.forEach((e,i)=>e.idx=i);
+  $('pyrPrice').value='';$('pyrTarget').value='';$('pyrLots').value=1;
+  renderAll();
+});
+
+function addExit(type) {
+  const price=parseFloat($('exitPrice').value);
+  const lots=parseInt($('exitLots').value)||1;
+  if(!price||!S.baseLots){alert('Calculate base position first.');return;}
+  const {totalOpenLots}=buildPosition();
+  if(lots>totalOpenLots){alert(`You only have ${totalOpenLots} lots open.`);return;}
+  // Calculate P&L for this exit based on FIFO avg of remaining entries
+  // Quick approx: use current open avg
+  const {totalCostBasis}=buildPosition();
+  const avgCost=totalCostBasis/totalOpenLots;
+  const pnl=(price-avgCost)*lots*S.lotSize;
+  S.exits.push({price,lots,type,pnl});
+  $('exitPrice').value='';$('exitLots').value=1;
+  renderAll();
+}
+
+$('exitProfitBtn').addEventListener('click',()=>addExit('profit'));
+$('exitLossBtn').addEventListener('click',()=>addExit('loss'));
+
+// Remove pyramid entry
+$('pyrTableWrap').addEventListener('click',e=>{
+  const btn=e.target.closest('[data-pidx]');
+  if(btn){
+    S.pyrEntries.splice(parseInt(btn.dataset.pidx),1);
+    S.pyrEntries.forEach((e,i)=>e.idx=i);
+    renderAll();
+  }
+});
+
+// Remove exit
+$('exitTableWrap').addEventListener('click',e=>{
+  const btn=e.target.closest('[data-xidx]');
+  if(btn){S.exits.splice(parseInt(btn.dataset.xidx),1);renderAll();}
+});
+</script>
+</body>
+</html>
